@@ -1,0 +1,62 @@
+[project]
+name = "finora"
+version = "0.1.0"
+description = "Backend de FINORA: lógica de negocio, cálculos financieros y API."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
+    "authlib>=1.9.1",
+    "cryptography>=50.0.2",
+    "email-validator>=2.3.0",
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.2",
+    "pyotp>=2.10.0",
+    "sqlalchemy>=2.1.6",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.16.0",
+    "hypothesis>=6.140.0",
+    "mypy>=1.20.0",
+    "pytest>=9.2.0",
+    "respx>=0.23.1",
+    "ruff>=0.17.3",
+    "testcontainers[postgres]>=4.15.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "S", "DTZ"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests", "migrations"]
+
+# Authlib no publica tipos; su uso se limita a finora.auth.google.
+[[tool.mypy.overrides]]
+module = ["authlib.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "db: requiere Docker para levantar PostgreSQL con Testcontainers",
+    "mailpit: requiere Docker para levantar Mailpit con Testcontainers",
+]

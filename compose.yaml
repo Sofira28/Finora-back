@@ -1,0 +1,34 @@
+# Servicios locales de desarrollo: base de datos (T-SETUP-DB-01) y correo (T-AUTH-BE-02).
+# Credenciales solo para desarrollo local; nunca reutilizar en otros entornos.
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: finora
+      POSTGRES_PASSWORD: finora
+      POSTGRES_DB: finora
+      TZ: UTC
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - finora-db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finora -d finora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Servidor SMTP de pruebas (ADR-0002): atrapa todos los correos; ninguno sale a internet.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "127.0.0.1:1025:1025" # SMTP
+      - "127.0.0.1:8025:8025" # bandeja web
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  finora-db:
