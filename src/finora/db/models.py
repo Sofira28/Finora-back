@@ -3,7 +3,7 @@
 import importlib
 
 # Un módulo por feature con tablas; agregar aquí cada uno nuevo.
-_MODEL_MODULES = ("finora.auth.models",)
+_MODEL_MODULES = ("finora.auth.models", "finora.accounts.models")
 
 
 def load_all_models() -> None:
