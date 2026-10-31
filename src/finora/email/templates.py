@@ -11,8 +11,9 @@ from finora.email.sender import OutgoingEmail
 _FIRMA = "El equipo de FINORA\nTu dinero, más claro."
 
 
-def _html(name: str, paragraphs: list[str], link: tuple[str, str] | None = None) -> str:
+def _html(name: str | None, paragraphs: list[str], link: tuple[str, str] | None = None) -> str:
     # paragraphs es HTML de confianza (texto fijo de las plantillas); name y link se escapan.
+    greeting = f"Hola, {escape(name)}:" if name else "Hola:"
     body = "".join(f"<p>{p}</p>" for p in paragraphs)
     button = ""
     if link is not None:
@@ -20,24 +21,26 @@ def _html(name: str, paragraphs: list[str], link: tuple[str, str] | None = None)
         button = f'<p><a href="{escape(url)}">{escape(label)}</a></p>'
     return (
         '<!doctype html><html lang="es-CO"><body style="font-family: Inter, Arial, sans-serif">'
-        f"<p>Hola, {escape(name)}:</p>{body}{button}"
+        f"<p>{greeting}</p>{body}{button}"
         "<p>El equipo de FINORA<br>Tu dinero, más claro.</p></body></html>"
     )
 
 
-def verify_email(to: str, name: str, link: str) -> OutgoingEmail:
+def verify_email(to: str, link: str) -> OutgoingEmail:
+    # Sin el nombre: lo escribió quien registró la cuenta y la dirección aún no está
+    # confirmada; incluirlo dejaría a un tercero poner su texto en un correo de FINORA.
     return OutgoingEmail(
         to=to,
         subject="Confirma tu correo en FINORA",
         text=(
-            f"Hola, {name}:\n\n"
+            "Hola:\n\n"
             "Gracias por registrarte en FINORA. Para activar tu cuenta, confirma tu correo "
             f"abriendo este enlace:\n\n{link}\n\n"
             "El enlace vence en 24 horas y solo se puede usar una vez.\n"
             "Si no creaste esta cuenta, ignora este mensaje.\n\n" + _FIRMA
         ),
         html=_html(
-            name,
+            None,
             [
                 "Gracias por registrarte en FINORA. Para activar tu cuenta, confirma tu correo.",
                 "El enlace vence en 24 horas y solo se puede usar una vez. "

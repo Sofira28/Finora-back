@@ -99,7 +99,7 @@ def test_cambiar_nombre(
     assert ana.name == "Ana María"
 
 
-@pytest.mark.parametrize("name", ["", "   ", "a" * 101])
+@pytest.mark.parametrize("name", ["", "   ", "a" * 101, "Ana\nMaría"])
 def test_nombre_invalido(client: TestClient, csrf: dict[str, str], name: str) -> None:
     assert client.patch("/api/v1/me", json={"name": name}, headers=csrf).status_code == 422
 

@@ -28,7 +28,7 @@ CORREO = OutgoingEmail(
 )
 
 PLANTILLAS: dict[str, Callable[[], OutgoingEmail]] = {
-    "verificacion": lambda: templates.verify_email("ana@correo.com", "Ana", ENLACE),
+    "verificacion": lambda: templates.verify_email("ana@correo.com", ENLACE),
     "restablecer": lambda: templates.password_reset(
         "ana@correo.com", "Ana", ENLACE, first_password=False
     ),
@@ -50,7 +50,8 @@ def test_plantillas_tienen_texto_html_y_enlace(nombre: str) -> None:
     correo = PLANTILLAS[nombre]()
     assert correo.to == "ana@correo.com"
     assert correo.subject
-    assert "Hola, Ana:" in correo.text
+    # La verificación va a una dirección sin confirmar: no lleva el nombre (QA-03).
+    assert ("Hola:" if nombre == "verificacion" else "Hola, Ana:") in correo.text
     assert ENLACE in correo.text
     assert ENLACE in correo.html
     assert 'lang="es-CO"' in correo.html
@@ -68,8 +69,8 @@ def test_primera_contrasena_usa_otro_asunto() -> None:
 
 
 def test_html_escapa_el_nombre_y_los_enlaces() -> None:
-    correo = templates.verify_email(
-        "ana@correo.com", '<script>alert("x")</script>', 'http://x/?a=1&b="2"'
+    correo = templates.password_reset(
+        "ana@correo.com", '<script>alert("x")</script>', 'http://x/?a=1&b="2"', first_password=False
     )
     assert "<script>" not in correo.html
     assert "&lt;script&gt;" in correo.html

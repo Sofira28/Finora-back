@@ -39,6 +39,7 @@ from finora.auth.passwords import (
     validate_password,
     verify_password,
 )
+from finora.auth.schemas import strip_control_characters
 from finora.auth.sessions import (
     REAUTH_WINDOW,
     SessionStage,
@@ -105,7 +106,7 @@ def _limit_by_ip(ctx: RequestContext, limit: rate_limit.Limit) -> None:
 def _verification_email(ctx: RequestContext, user: User) -> OutgoingEmail:
     raw = issue_token(ctx.db, user.id, TokenPurpose.VERIFY_EMAIL, ctx.now)
     link = f"{ctx.settings.web_url}/verificar-correo?token={raw}"
-    return templates.verify_email(user.email, user.name, link)
+    return templates.verify_email(user.email, link)
 
 
 # --- Registro y verificación --------------------------------------------------------------
@@ -149,7 +150,15 @@ def register(
             )
         )
     else:
-        # Cuenta sin verificar: se reenvía la verificación; nombre y contraseña no cambian.
+        # Cuenta sin verificar: nadie demostró aún que el correo es suyo, así que manda el
+        # último registro. Conservar la contraseña anterior permitiría la precaptura: un
+        # tercero registra el correo ajeno y entra cuando la dueña lo confirme (QA-03).
+        # Emitir el enlace nuevo invalida los anteriores (RN-AUTH-04).
+        existing.name = name
+        existing.password_hash = password_hash
+        ctx.db.add(
+            DataConsent(user_id=existing.id, policy_version=policy_version, accepted_at=ctx.now)
+        )
         ctx.emails.append(_verification_email(ctx, existing))
     ctx.db.commit()
 
@@ -679,7 +688,7 @@ def _link_google(ctx: RequestContext, user: User, subject: str) -> None:
 
 def _google_name(identity: GoogleIdentity) -> str:
     """RF-AUTH-05: nombre de Google ajustado a RN-AUTH-03; sin nombre, el usuario del correo."""
-    name = identity.name.strip()[:100].strip()
+    name = strip_control_characters(identity.name).strip()[:100].strip()
     return name or identity.email.split("@")[0][:100]
 
 

@@ -216,6 +216,14 @@ def test_nombre_de_google_ajustado(
     assert db_session.scalars(select(User.name)).one() == "ana"
 
 
+def test_nombre_de_google_sin_caracteres_de_control(
+    client: TestClient, db_session: Session, google: FakeGoogle
+) -> None:
+    google.identity = replace(ANA_GOOGLE, name="Ana\nGómez\x00")
+    _google(client)
+    assert db_session.scalars(select(User.name)).one() == "AnaGómez"
+
+
 def test_correo_en_mayusculas_se_normaliza(
     client: TestClient, db_session: Session, google: FakeGoogle
 ) -> None:

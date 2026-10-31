@@ -162,9 +162,10 @@ def test_registro_con_correo_verificado_responde_igual_y_avisa(
     assert (ana.name, ana.password_hash) == ("Ana Original", original)
 
 
-def test_registro_con_correo_sin_verificar_reenvia_sin_cambiar_datos(
+def test_registro_con_correo_sin_verificar_reemplaza_los_datos(
     client: TestClient, db_session: Session, email_outbox: InMemoryEmailSender
 ) -> None:
+    """Nadie demostró aún que el correo es suyo: manda el último registro (QA-03)."""
     client.post("/api/v1/auth/register", json=_registro())
     primer_token = _token(email_outbox.outbox[0])
     otra = _registro(name="Otra", password="otra clave muy larga 2")  # noqa: S106 - de prueba
@@ -172,14 +173,53 @@ def test_registro_con_correo_sin_verificar_reenvia_sin_cambiar_datos(
     assert response.json() == MENSAJE
     segundo = email_outbox.outbox[1]
     assert segundo.subject == "Confirma tu correo en FINORA"
-    assert "Hola, Ana:" in segundo.text
     # El enlace anterior deja de servir (RN-AUTH-04).
     assert client.post("/api/v1/auth/verify-email", json={"token": primer_token}).status_code == 400
     assert (
         client.post("/api/v1/auth/verify-email", json={"token": _token(segundo)}).status_code == 204
     )
     ana = db_session.scalars(select(User)).one()
-    assert verify_password(ana.password_hash, CLAVE)
+    assert ana.name == "Otra"
+    assert verify_password(ana.password_hash, "otra clave muy larga 2")
+    assert not verify_password(ana.password_hash, CLAVE)
+
+
+def test_precaptura_de_cuenta_sin_verificar(
+    client: TestClient, email_outbox: InMemoryEmailSender
+) -> None:
+    """QA-03: un tercero registra el correo ajeno; luego la dueña se registra y lo confirma."""
+    atacante = _registro(name="Ana", password="clave del atacante 123")  # noqa: S106 - de prueba
+    victima = _registro(name="Ana", password="clave de la victima 456")  # noqa: S106 - de prueba
+    client.post("/api/v1/auth/register", json=atacante)
+    client.post("/api/v1/auth/register", json=victima)
+    token = _token(email_outbox.outbox[-1])
+    assert client.post("/api/v1/auth/verify-email", json={"token": token}).status_code == 204
+
+    def entrar(clave: str) -> int:
+        cuerpo = {"email": "ana@correo.com", "password": clave}
+        return client.post("/api/v1/auth/login", json=cuerpo).status_code
+
+    assert entrar("clave del atacante 123") == 401
+    assert entrar("clave de la victima 456") == 200
+
+
+def test_correo_de_verificacion_sin_texto_de_quien_registra(
+    client: TestClient, email_outbox: InMemoryEmailSender
+) -> None:
+    """QA-03: el nombre no verificado no llega al correo (evita usarlo para engañar)."""
+    nombre = "Ana. Tu cuenta fue bloqueada, entra a http://sitio-falso.co"
+    client.post("/api/v1/auth/register", json=_registro(name=nombre))
+    [correo] = email_outbox.outbox
+    assert "sitio-falso" not in correo.text
+    assert "sitio-falso" not in correo.html
+    assert correo.text.startswith("Hola:")
+
+
+@pytest.mark.parametrize("nombre", ["Ana\nVisita http://x.co", "Ana\r\nBcc: x@y.co", "Ana\x00"])
+def test_nombre_sin_caracteres_de_control(client: TestClient, nombre: str) -> None:
+    response = client.post("/api/v1/auth/register", json=_registro(name=nombre))
+    assert response.status_code == 422
+    assert response.json()["errors"][0]["loc"] == ["body", "name"]
 
 
 # --- Verificación (VAL-AUTH-09) -----------------------------------------------------------
