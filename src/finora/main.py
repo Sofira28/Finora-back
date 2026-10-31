@@ -4,11 +4,16 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import APIRouter, FastAPI, Request, Response
 
-from finora.api.v1 import accounts, auth, health, me
+from finora.api.v1 import accounts, auth, health, me, transactions
 from finora.auth.maintenance import PeriodicPurge
 from finora.errors import register_error_handlers
 
-NO_STORE_PREFIXES = ("/api/v1/auth", "/api/v1/me", "/api/v1/accounts")
+NO_STORE_PREFIXES = (
+    "/api/v1/auth",
+    "/api/v1/me",
+    "/api/v1/accounts",
+    "/api/v1/transactions",
+)
 
 
 def create_app() -> FastAPI:
@@ -31,6 +36,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(auth.router)
     api_v1.include_router(me.router)
     api_v1.include_router(accounts.router)
+    api_v1.include_router(transactions.router)
     app.include_router(api_v1)
     return app
 
