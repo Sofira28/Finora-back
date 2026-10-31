@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -64,6 +65,8 @@ class Account(Base):
         CheckConstraint("credit_limit > 0", name="credit_limit_positive"),
         CheckConstraint("statement_day BETWEEN 1 AND 31", name="statement_day_range"),
         CheckConstraint("payment_due_day BETWEEN 1 AND 31", name="payment_due_day_range"),
+        # Destino de las FK compuestas de `transactions` (misma cuenta, mismo usuario).
+        UniqueConstraint("id", "user_id", name="uq_accounts_id_user_id"),
     )
 
     # UUIDv7: no secuencial para quien lo ve, ordenado por tiempo para los índices.
