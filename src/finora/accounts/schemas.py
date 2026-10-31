@@ -1,10 +1,12 @@
-"""Modelos de request de /accounts (specs/api-contracts.md §5; spec §9 y §10).
+"""Modelos de request y response de /accounts (specs/api-contracts.md §5; spec §9 y §10).
 
 Pydantic valida el formato (422 con `loc` y `type`); las reglas que dependen del tipo de
 cuenta o de otras cuentas las aplica el servicio, con mensajes es-CO.
 """
 
 import re
+import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
@@ -95,3 +97,45 @@ class UpdateAccountRequest(_Request):
     credit_limit: PositiveAmount | None = None
     statement_day: Day | None = None
     payment_due_day: Day | None = None
+
+
+# --- Respuestas (api-contracts.md §5.2) ---------------------------------------------------
+
+# Salida: cadena decimal con 2 decimales (`"2800000.00"`), nunca número JSON.
+ApiAmount = Annotated[
+    str, WithJsonSchema({"type": "string", "pattern": AMOUNT_PATTERN, "examples": ["1250000.00"]})
+]
+
+
+class CreditCardResponse(BaseModel):
+    credit_limit: ApiAmount
+    available_credit: ApiAmount
+    usage_percent: int
+    over_limit: bool
+    statement_day: int
+    payment_due_day: int
+
+
+class AccountResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+    type: AccountType
+    institution: str | None
+    opening_balance: ApiAmount
+    # Saldo actual; en tarjetas, la deuda (RN-ACC-02).
+    balance: ApiAmount
+    has_movements: bool
+    archived: bool
+    credit_card: CreditCardResponse | None
+    created_at: datetime
+
+
+class TotalsResponse(BaseModel):
+    available_balance: ApiAmount
+    net_worth: ApiAmount
+    credit_card_debt: ApiAmount
+
+
+class AccountListResponse(BaseModel):
+    accounts: list[AccountResponse]
+    totals: TotalsResponse
