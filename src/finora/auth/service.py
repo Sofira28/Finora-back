@@ -39,7 +39,6 @@ from finora.auth.passwords import (
     validate_password,
     verify_password,
 )
-from finora.auth.schemas import strip_control_characters
 from finora.auth.sessions import (
     REAUTH_WINDOW,
     SessionStage,
@@ -52,6 +51,7 @@ from finora.auth.tokens import TokenPurpose, consume_token, hash_token, issue_to
 from finora.config import Settings
 from finora.email import OutgoingEmail, templates
 from finora.errors import ApiProblemError
+from finora.validation import strip_control_characters
 
 logger = logging.getLogger(__name__)
 

@@ -1,32 +1,21 @@
 """Modelos de request/response de /auth y /me (specs/api-contracts.md §4)."""
 
-import unicodedata
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, StringConstraints
+
+from finora.validation import reject_control_characters
 
 # Tope de entrada antes de normalizar y calcular el hash: la política (RN-AUTH-02) la aplica
 # el servicio con sus mensajes; esto solo evita cuerpos desmedidos.
 RawPassword = Annotated[str, Field(min_length=1, max_length=1024)]
 
 
-def strip_control_characters(value: str) -> str:
-    """Quita saltos de línea y demás caracteres de control (categoría Unicode Cc)."""
-    return "".join(c for c in value if unicodedata.category(c) != "Cc")
-
-
-def _without_control_characters(value: str) -> str:
-    # El nombre aparece en correos: un salto de línea permitiría armar texto engañoso.
-    if strip_control_characters(value) != value:
-        raise ValueError("El nombre no puede tener saltos de línea ni caracteres de control.")
-    return value
-
-
 # RN-AUTH-03: sin espacios en los extremos, de 1 a 100 caracteres, sin caracteres de control.
 Name = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
-    AfterValidator(_without_control_characters),
+    AfterValidator(reject_control_characters),
 ]
 Token = Annotated[str, Field(min_length=1, max_length=256)]
 # En el inicio de sesión cualquier texto vale: un correo mal escrito recibe el mismo 401.
