@@ -71,7 +71,8 @@ def migrated_url(postgres_url: str, alembic_cfg: Config) -> str:
 
 @pytest.fixture(scope="session")
 def engine(migrated_url: str) -> Iterator[Engine]:
-    engine = create_db_engine(migrated_url)
+    # Como la API: rol finora_app, para que RLS se aplique también en las pruebas.
+    engine = create_db_engine(migrated_url, app_role=True)
     yield engine
     engine.dispose()
 

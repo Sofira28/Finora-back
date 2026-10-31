@@ -3,7 +3,7 @@
 El usuario sale siempre de la sesión: ningún endpoint recibe un identificador de usuario.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Annotated
 
 from fastapi import Depends, Request
@@ -21,6 +21,7 @@ from finora.auth.sessions import (
 from finora.clock import Clock, get_clock
 from finora.config import Settings, get_settings
 from finora.db import get_db_session
+from finora.db.rls import bind_user, unbind_user
 from finora.errors import ApiProblemError
 
 DbSession = Annotated[Session, Depends(get_db_session)]
@@ -92,6 +93,18 @@ def current_user(session: CurrentSession, db: DbSession) -> User:
 
 
 CurrentUser = Annotated[User, Depends(current_user)]
+
+
+def user_db(user: CurrentUser, db: DbSession) -> Iterator[Session]:
+    """Sesión de BD con el usuario fijado para RLS (ADR-0004): para datos financieros."""
+    bind_user(db, user.id)
+    try:
+        yield db
+    finally:
+        unbind_user(db)
+
+
+UserDb = Annotated[Session, Depends(user_db)]
 
 
 def require_recent_reauth(session: CurrentSession, clock: ClockDep) -> AuthSession:
