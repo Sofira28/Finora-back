@@ -59,9 +59,10 @@ def _sum(amounts: Iterable[Money]) -> Money:
 
 
 def current_balance(opening_balance: Money, movements: Money | None = None) -> Money:
-    """Saldo actual = saldo inicial + efecto de los movimientos (RN-ACC-02).
+    """Saldo actual = saldo inicial + efecto de los movimientos (RN-ACC-02, RN-TRX-06).
 
-    Hasta que exista `transactions` no hay movimientos y el saldo es el inicial.
+    `movements` es la suma de `transactions.ledger.effects_by_account` para la cuenta;
+    `None` si no tiene movimientos.
     """
     return opening_balance + (movements or _zero())
 

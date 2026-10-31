@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from finora.accounts.models import Account, AccountType
 from finora.accounts.schemas import CARD_FIELDS, CreateAccountRequest, UpdateAccountRequest
 from finora.domain.money import Money
 from finora.errors import ApiProblemError
+from finora.transactions.models import Transaction
 
 # SUP-ACC-06: tope técnico para evitar abusos.
 MAX_ACCOUNTS = 100
@@ -57,12 +58,19 @@ def _for_storage(amount: Decimal) -> Decimal:
 
 
 def movement_count(db: Session, account: Account) -> int:
-    """Movimientos de la cuenta (RF-ACC-06 y 09).
-
-    `transactions` aún no existe: ninguna cuenta tiene movimientos. Es el único punto que
-    cambia cuando exista (plan.md §2).
-    """
-    return 0
+    """Movimientos de la cuenta como origen o destino (RF-ACC-06 y 09, RN-TRX-10)."""
+    count = db.scalar(
+        select(func.count())
+        .select_from(Transaction)
+        .where(
+            Transaction.user_id == account.user_id,
+            or_(
+                Transaction.account_id == account.id,
+                Transaction.destination_account_id == account.id,
+            ),
+        )
+    )
+    return count or 0
 
 
 # --- Consultas ----------------------------------------------------------------------------
@@ -226,11 +234,19 @@ def delete_account(db: Session, user_id: uuid.UUID, account_id: uuid.UUID) -> No
     """RF-ACC-09 y RN-ACC-10: solo sin movimientos; borrado físico y definitivo."""
     account = get_account(db, user_id, account_id)
     if movement_count(db, account) > 0:
-        raise ApiProblemError(
-            409,
-            "account_has_movements",
-            "Esta cuenta tiene movimientos. Puedes archivarla para ocultarla sin perder su "
-            "historial.",
-        )
+        raise _has_movements()
     db.delete(account)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Otra petición registró un movimiento entre tanto: la FK lo impide (RN-TRX-10).
+        db.rollback()
+        raise _has_movements() from exc
+
+
+def _has_movements() -> ApiProblemError:
+    return ApiProblemError(
+        409,
+        "account_has_movements",
+        "Esta cuenta tiene movimientos. Puedes archivarla para ocultarla sin perder su historial.",
+    )

@@ -29,6 +29,7 @@ from finora.auth.dependencies import (
     verify_request_origin,
 )
 from finora.domain.money import Money
+from finora.transactions.ledger import effects_by_account
 
 router = APIRouter(
     prefix="/accounts",
@@ -45,13 +46,27 @@ def _api(amount: Money) -> str:
     return amount.rounded(2).to_api_string()
 
 
-def _balance(db: Session, account: Account) -> Money:
-    # Sin `transactions` no hay movimientos: el saldo es el inicial (RN-ACC-02).
-    return balances.current_balance(_money(account.opening_balance))
+Effects = dict[uuid.UUID, Money]
 
 
-def _response(db: Session, account: Account) -> AccountResponse:
-    balance = _balance(db, account)
+def _effects(db: Session, user_id: uuid.UUID, accounts: list[Account]) -> Effects:
+    """Efecto de los movimientos por cuenta, en una sola consulta (ADR-0005).
+
+    Una cuenta aparece si y solo si tiene movimientos (como origen o destino).
+    """
+    return effects_by_account(db, user_id, [a.id for a in accounts])
+
+
+def _balance(account: Account, effects: Effects) -> Money:
+    return balances.current_balance(_money(account.opening_balance), effects.get(account.id))
+
+
+def _one(db: Session, user_id: uuid.UUID, account: Account) -> AccountResponse:
+    return _response(account, _effects(db, user_id, [account]))
+
+
+def _response(account: Account, effects: Effects) -> AccountResponse:
+    balance = _balance(account, effects)
     card = None
     limit, statement, due = account.credit_limit, account.statement_day, account.payment_due_day
     if account.type == AccountType.CREDIT_CARD:
@@ -73,7 +88,7 @@ def _response(db: Session, account: Account) -> AccountResponse:
         institution=account.institution,
         opening_balance=_api(_money(account.opening_balance)),
         balance=_api(balance),
-        has_movements=service.movement_count(db, account) > 0,
+        has_movements=account.id in effects,
         archived=account.archived_at is not None,
         credit_card=card,
         created_at=account.created_at,
@@ -84,14 +99,17 @@ def _response(db: Session, account: Account) -> AccountResponse:
 def list_accounts(user: CurrentUser, db: UserDb) -> AccountListResponse:
     """Activas y archivadas; los totales solo cuentan las activas (RN-ACC-03 a 05 y 09)."""
     accounts = service.list_accounts(db, user.id)
+    effects = _effects(db, user.id, accounts)
     totals = balances.totals(
         balances.AccountBalance(
-            type=AccountType(a.type), balance=_balance(db, a), archived=a.archived_at is not None
+            type=AccountType(a.type),
+            balance=_balance(a, effects),
+            archived=a.archived_at is not None,
         )
         for a in accounts
     )
     return AccountListResponse(
-        accounts=[_response(db, a) for a in accounts],
+        accounts=[_response(a, effects) for a in accounts],
         totals=TotalsResponse(
             available_balance=_api(totals.available_balance),
             net_worth=_api(totals.net_worth),
@@ -104,12 +122,12 @@ def list_accounts(user: CurrentUser, db: UserDb) -> AccountListResponse:
 def create_account(
     body: CreateAccountRequest, user: CurrentUser, db: UserDb, clock: ClockDep
 ) -> AccountResponse:
-    return _response(db, service.create_account(db, user.id, body, clock.now()))
+    return _one(db, user.id, service.create_account(db, user.id, body, clock.now()))
 
 
 @router.get("/{account_id}")
 def get_account(account_id: uuid.UUID, user: CurrentUser, db: UserDb) -> AccountResponse:
-    return _response(db, service.get_account(db, user.id, account_id))
+    return _one(db, user.id, service.get_account(db, user.id, account_id))
 
 
 @router.patch("/{account_id}")
@@ -121,21 +139,21 @@ def update_account(
     clock: ClockDep,
 ) -> AccountResponse:
     account = service.update_account(db, user.id, account_id, body, clock.now())
-    return _response(db, account)
+    return _one(db, user.id, account)
 
 
 @router.post("/{account_id}/archive")
 def archive_account(
     account_id: uuid.UUID, user: CurrentUser, db: UserDb, clock: ClockDep
 ) -> AccountResponse:
-    return _response(db, service.archive_account(db, user.id, account_id, clock.now()))
+    return _one(db, user.id, service.archive_account(db, user.id, account_id, clock.now()))
 
 
 @router.post("/{account_id}/restore")
 def restore_account(
     account_id: uuid.UUID, user: CurrentUser, db: UserDb, clock: ClockDep
 ) -> AccountResponse:
-    return _response(db, service.restore_account(db, user.id, account_id, clock.now()))
+    return _one(db, user.id, service.restore_account(db, user.id, account_id, clock.now()))
 
 
 @router.delete("/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
