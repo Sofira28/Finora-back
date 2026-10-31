@@ -109,7 +109,7 @@ def upgrade() -> None:
             "user_id",
             sa.literal_column("occurred_on DESC"),
             sa.literal_column("created_at DESC"),
-            "id",
+            sa.literal_column("id DESC"),
         ],
     )
     op.create_index(op.f("ix_transactions_account_id"), "transactions", ["account_id"])

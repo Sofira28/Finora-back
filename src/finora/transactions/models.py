@@ -150,11 +150,13 @@ class Transaction(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-# Listado por usuario, del más reciente al más antiguo, con desempate estable.
+# Listado por usuario, del más reciente al más antiguo, con desempate estable. Todas las
+# columnas en el mismo sentido: el cursor avanza con una comparación de tuplas y el índice
+# sirve leído hacia adelante (`date_desc`) o hacia atrás (`date_asc`).
 Index(
     "ix_transactions_user_id_occurred_on",
     Transaction.user_id,
     Transaction.occurred_on.desc(),
     Transaction.created_at.desc(),
-    Transaction.id,
+    Transaction.id.desc(),
 )
